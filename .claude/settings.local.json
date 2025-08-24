@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./build.sh)",
+      "Bash(mkdir:*)",
+      "Bash(cmake:*)",
+      "Bash(chmod:*)",
+      "Bash(./quick_build.sh)",
+      "Bash(g++:*)",
+      "Bash(./simple_test)",
+      "Bash(cat:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
