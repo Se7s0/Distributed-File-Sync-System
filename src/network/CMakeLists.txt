@@ -1,5 +1,6 @@
 add_library(dfs_network STATIC
     socket.cpp
+    http_server.cpp
 )
 
 target_include_directories(dfs_network PUBLIC

@@ -8,7 +8,9 @@
       "Bash(./quick_build.sh)",
       "Bash(g++:*)",
       "Bash(./simple_test)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Read(//mnt/c/Users/mohussein/Desktop/swe/**)",
+      "Bash(cd:*)"
     ],
     "deny": [],
     "ask": []
