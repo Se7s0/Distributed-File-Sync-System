@@ -46,17 +46,17 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
-# Example: Add Boost (uncomment if needed)
-# Option 1: Use system-installed Boost (faster):
-# find_package(Boost 1.70 REQUIRED COMPONENTS system filesystem thread)
+# Boost.Asio for event-driven HTTP server (Phase 2)
+# Install via: vcpkg install boost-asio:x64-windows boost-system:x64-windows
+find_package(Boost COMPONENTS system)
 
-# Option 2: Download specific Boost module (much smaller):
-# FetchContent_Declare(
-#     boost_asio
-#     GIT_REPOSITORY https://github.com/boostorg/asio.git
-#     GIT_TAG boost-1.82.0
-# )
-# FetchContent_MakeAvailable(boost_asio)
+if(Boost_FOUND)
+    message(STATUS "Boost found: ${Boost_VERSION}")
+    message(STATUS "Boost include: ${Boost_INCLUDE_DIRS}")
+else()
+    message(STATUS "Boost not found - Asio server will not be built")
+    message(STATUS "To install: vcpkg install boost-asio:x64-windows")
+endif()
 
 # Project structure
 add_subdirectory(src/core)

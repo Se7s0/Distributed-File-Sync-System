@@ -1,4 +1,4 @@
-#include "dfs/network/http_server.hpp"
+#include "dfs/network/http_server_legacy.hpp"
 #include <spdlog/spdlog.h>
 #include <algorithm>
 
@@ -8,27 +8,20 @@ namespace network {
 using dfs::Ok;
 using dfs::Err;
 
-HttpServer::HttpServer(size_t thread_pool_size, size_t max_queue_size)
-    : port_(0)
-    , thread_pool_size_(thread_pool_size)
-    , max_queue_size_(max_queue_size)
-    , running_(false)
-    , active_connections_(0)
-    , total_processed_(0) {
-
-    spdlog::info("HttpServer created with {} worker threads, max queue size: {}",
-                 thread_pool_size_, max_queue_size_);
+HttpServerLegacy::HttpServerLegacy()
+    : running_(false)
+    , port_(0) {
 }
 
-HttpServer::~HttpServer() {
+HttpServerLegacy::~HttpServerLegacy() {
     stop();
 }
 
-void HttpServer::set_handler(HttpRequestHandler handler) {
+void HttpServerLegacy::set_handler(HttpRequestHandler handler) {
     handler_ = std::move(handler);
 }
 
-Result<void> HttpServer::listen(uint16_t port, const std::string& address) {
+Result<void> HttpServerLegacy::listen(uint16_t port, const std::string& address) {
     // Create TCP socket
     auto create_result = listener_.create(SocketType::TCP);
     if (create_result.is_error()) {
@@ -56,12 +49,12 @@ Result<void> HttpServer::listen(uint16_t port, const std::string& address) {
     }
 
     port_ = port;
-    spdlog::info("HTTP server (thread pool) listening on {}:{}", address, port);
+    spdlog::info("HTTP server listening on {}:{}", address, port);
 
     return Ok();
 }
 
-Result<void> HttpServer::serve_forever() {
+Result<void> HttpServerLegacy::serve_forever() {
     if (!listener_.is_valid()) {
         return Err<void, std::string>("Server not initialized. Call listen() first.");
     }
@@ -70,21 +63,16 @@ Result<void> HttpServer::serve_forever() {
         return Err<void, std::string>("No request handler set. Call set_handler() first.");
     }
 
-    // Spawn worker threads
-    for (size_t i = 0; i < thread_pool_size_; ++i) {
-        worker_threads_.emplace_back([this] { worker_thread(); });
-    }
+    running_ = true;
+    spdlog::info("Server started. Waiting for connections...");
 
-    running_.store(true, std::memory_order_release);
-    spdlog::info("Server started with {} worker threads. Waiting for connections...",
-                 thread_pool_size_);
-
-    // Main accept loop
-    while (running_.load(std::memory_order_acquire)) {
+    // Main server loop
+    while (running_) {
         // Accept incoming connection
+        // Note: This blocks until a connection arrives
         auto accept_result = listener_.accept();
         if (accept_result.is_error()) {
-            if (!running_.load(std::memory_order_acquire)) {
+            if (!running_) {
                 // Server was stopped, exit gracefully
                 break;
             }
@@ -95,105 +83,27 @@ Result<void> HttpServer::serve_forever() {
         auto client = std::move(accept_result.value());
         spdlog::debug("Accepted new connection");
 
-        // Enqueue with overflow protection
-        {
-            std::lock_guard<std::mutex> lock(queue_mutex_);
-            if (task_queue_.size() >= max_queue_size_) {
-                spdlog::warn("Queue full ({} tasks), rejecting connection", max_queue_size_);
-
-                // Send 503 Service Unavailable
-                auto overload_response = create_error_response(
-                    HttpStatus::SERVICE_UNAVAILABLE,
-                    "Server overloaded, please try again later"
-                );
-                overload_response.set_header("Retry-After", "5");
-                send_response(*client, overload_response);
-                client->close();
-                continue;
-            }
-
-            task_queue_.push(std::move(client));
+        // Handle the connection
+        auto handle_result = handle_connection(std::move(client));
+        if (handle_result.is_error()) {
+            spdlog::error("Error handling connection: {}", handle_result.error());
+            // Continue with next connection
         }
-
-        // Wake one worker thread
-        queue_cv_.notify_one();
     }
 
     spdlog::info("Server stopped");
     return Ok();
 }
 
-void HttpServer::stop() {
-    if (running_.load(std::memory_order_acquire)) {
+void HttpServerLegacy::stop() {
+    if (running_) {
         spdlog::info("Stopping server...");
-
-        // Signal shutdown
-        running_.store(false, std::memory_order_release);
-
-        // Wake all workers so they see running_ = false
-        queue_cv_.notify_all();
-
-        // Close listener to unblock accept()
+        running_ = false;
         listener_.close();
-
-        // Join all worker threads
-        for (auto& thread : worker_threads_) {
-            if (thread.joinable()) {
-                thread.join();
-            }
-        }
-
-        worker_threads_.clear();
-
-        spdlog::info("Server stopped. Processed {} total requests",
-                     total_processed_.load());
     }
 }
 
-void HttpServer::worker_thread() {
-    spdlog::debug("Worker thread started");
-
-    while (true) {
-        std::unique_ptr<Socket> client;
-
-        {
-            std::unique_lock<std::mutex> lock(queue_mutex_);
-
-            // Wait for task or shutdown signal
-            queue_cv_.wait(lock, [this] {
-                return !task_queue_.empty() || !running_.load(std::memory_order_acquire);
-            });
-
-            // Check shutdown
-            if (!running_.load(std::memory_order_acquire) && task_queue_.empty()) {
-                break;  // Exit thread
-            }
-
-            // Get task
-            if (!task_queue_.empty()) {
-                client = std::move(task_queue_.front());
-                task_queue_.pop();
-            }
-        }  // Release lock here - critical!
-
-        // Process connection WITHOUT holding lock
-        if (client) {
-            active_connections_.fetch_add(1, std::memory_order_relaxed);
-
-            auto result = handle_connection(std::move(client));
-            if (result.is_error()) {
-                spdlog::error("Error handling connection: {}", result.error());
-            }
-
-            active_connections_.fetch_sub(1, std::memory_order_relaxed);
-            total_processed_.fetch_add(1, std::memory_order_relaxed);
-        }
-    }
-
-    spdlog::debug("Worker thread exiting");
-}
-
-Result<void> HttpServer::handle_connection(std::unique_ptr<Socket> client) {
+Result<void> HttpServerLegacy::handle_connection(std::unique_ptr<Socket> client) {
     // Create parser for this connection
     HttpParser parser;
 
@@ -241,13 +151,15 @@ Result<void> HttpServer::handle_connection(std::unique_ptr<Socket> client) {
         return Err<void, std::string>("Failed to send response: " + send_result.error());
     }
 
-    // Close connection (for now, we don't support keep-alive in thread pool version)
+    // Check for Connection: keep-alive header
+    // For Phase 1, we always close the connection after each request
+    // In later phases, we'll implement proper keep-alive support
     client->close();
 
     return Ok();
 }
 
-Result<HttpRequest> HttpServer::read_request(Socket& socket, HttpParser& parser) {
+Result<HttpRequest> HttpServerLegacy::read_request(Socket& socket, HttpParser& parser) {
     // Buffer for reading data
     constexpr size_t BUFFER_SIZE = 4096;
 
@@ -286,7 +198,7 @@ Result<HttpRequest> HttpServer::read_request(Socket& socket, HttpParser& parser)
     return Ok(parser.get_request());
 }
 
-Result<void> HttpServer::send_response(Socket& socket, const HttpResponse& response) {
+Result<void> HttpServerLegacy::send_response(Socket& socket, const HttpResponse& response) {
     // Serialize response to bytes
     std::vector<uint8_t> data = response.serialize();
 
@@ -312,7 +224,7 @@ Result<void> HttpServer::send_response(Socket& socket, const HttpResponse& respo
     return Ok();
 }
 
-HttpResponse HttpServer::create_error_response(HttpStatus status, const std::string& message) {
+HttpResponse HttpServerLegacy::create_error_response(HttpStatus status, const std::string& message) {
     HttpResponse response(status);
 
     // Create simple HTML error page
