@@ -3,6 +3,7 @@ set(NETWORK_SOURCES
     socket.cpp
     http_server.cpp              # Phase 1: Thread pool version
     http_server_legacy.cpp       # Legacy: Single-threaded version
+    http_router.cpp              # Phase 1.5: Router for organizing endpoints
 )
 
 # Add Asio server if Boost is available AND file exists

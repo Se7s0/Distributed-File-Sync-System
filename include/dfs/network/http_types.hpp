@@ -57,6 +57,8 @@ enum class HttpStatus {
     CREATED = 201,               // Resource created
     NO_CONTENT = 204,            // Success but no content to return
     BAD_REQUEST = 400,           // Client error - malformed request
+    UNAUTHORIZED = 401,          // Authentication required
+    FORBIDDEN = 403,             // Access denied
     NOT_FOUND = 404,             // Resource not found
     METHOD_NOT_ALLOWED = 405,    // Method not supported for resource
     INTERNAL_SERVER_ERROR = 500, // Server error
