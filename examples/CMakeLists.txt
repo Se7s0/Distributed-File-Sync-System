@@ -27,3 +27,12 @@ target_link_libraries(metadata_server_asio_example PRIVATE
     dfs_metadata
     nlohmann_json::nlohmann_json
 )
+
+# Phase 3: Event-driven metadata server (EventBus pattern)
+add_executable(metadata_server_events_example metadata_server_events_example.cpp)
+target_link_libraries(metadata_server_events_example PRIVATE
+    dfs_network
+    dfs_metadata
+    dfs_events
+    nlohmann_json::nlohmann_json
+)
