@@ -19,8 +19,9 @@
 #include "dfs/events/events.hpp"
 #include <spdlog/spdlog.h>
 #include <atomic>
-#include <queue>
 #include <mutex>
+#include <optional>
+#include <queue>
 
 namespace dfs::events {
 
@@ -57,6 +58,30 @@ public:
 
         bus_.subscribe<ServerShuttingDownEvent>([this](const ServerShuttingDownEvent& e) {
             on_server_shutdown(e);
+        });
+
+        bus_.subscribe<FileUploadStartedEvent>([this](const FileUploadStartedEvent& e) {
+            on_file_upload_started(e);
+        });
+
+        bus_.subscribe<FileChunkReceivedEvent>([this](const FileChunkReceivedEvent& e) {
+            on_file_chunk_received(e);
+        });
+
+        bus_.subscribe<FileUploadCompletedEvent>([this](const FileUploadCompletedEvent& e) {
+            on_file_upload_completed(e);
+        });
+
+        bus_.subscribe<FileDownloadCompletedEvent>([this](const FileDownloadCompletedEvent& e) {
+            on_file_download_completed(e);
+        });
+
+        bus_.subscribe<FileConflictDetectedEvent>([this](const FileConflictDetectedEvent& e) {
+            on_conflict_detected(e);
+        });
+
+        bus_.subscribe<FileConflictResolvedEvent>([this](const FileConflictResolvedEvent& e) {
+            on_conflict_resolved(e);
         });
     }
 
@@ -98,6 +123,36 @@ private:
         spdlog::info("════════════════════════════════════════════");
     }
 
+    void on_file_upload_started(const FileUploadStartedEvent& e) {
+        spdlog::info("[UploadStarted] session={} path={} bytes={}", e.session_id, e.file_path, e.total_bytes);
+    }
+
+    void on_file_chunk_received(const FileChunkReceivedEvent& e) {
+        spdlog::debug("[ChunkReceived] session={} path={} chunk={}/{} bytes={}",
+                      e.session_id, e.file_path, e.chunk_index + 1, e.total_chunks, e.bytes_received);
+    }
+
+    void on_file_upload_completed(const FileUploadCompletedEvent& e) {
+        spdlog::info("[UploadCompleted] session={} path={} bytes={} hash={} duration={}ms",
+                     e.session_id, e.file_path, e.total_bytes, e.hash, e.duration.count());
+    }
+
+    void on_file_download_completed(const FileDownloadCompletedEvent& e) {
+        spdlog::info("[DownloadCompleted] session={} path={} bytes={}",
+                     e.session_id, e.file_path, e.total_bytes);
+    }
+
+    void on_conflict_detected(const FileConflictDetectedEvent& e) {
+        spdlog::warn("[ConflictDetected] session={} path={} local_hash={} remote_hash={}",
+                     e.session_id, e.local.file_path, e.local.hash, e.remote.hash);
+    }
+
+    void on_conflict_resolved(const FileConflictResolvedEvent& e) {
+        spdlog::info("[ConflictResolved] session={} path={} strategy={} winner_hash={}",
+                     e.session_id, e.resolved.file_path,
+                     static_cast<int>(e.strategy), e.resolved.hash);
+    }
+
     EventBus& bus_;
 };
 
@@ -121,6 +176,12 @@ public:
         std::atomic<uint64_t> files_deleted{0};
         std::atomic<uint64_t> total_bytes_added{0};
         std::atomic<uint64_t> total_bytes_modified{0};
+        std::atomic<uint64_t> files_uploaded{0};
+        std::atomic<uint64_t> bytes_uploaded{0};
+        std::atomic<uint64_t> files_downloaded{0};
+        std::atomic<uint64_t> bytes_downloaded{0};
+        std::atomic<uint64_t> conflicts_detected{0};
+        std::atomic<uint64_t> conflicts_resolved{0};
     };
 
     explicit MetricsComponent(EventBus& bus) : bus_(bus) {
@@ -134,6 +195,22 @@ public:
 
         bus_.subscribe<FileDeletedEvent>([this](const FileDeletedEvent& e) {
             on_file_deleted(e);
+        });
+
+        bus_.subscribe<FileUploadCompletedEvent>([this](const FileUploadCompletedEvent& e) {
+            on_file_upload_completed(e);
+        });
+
+        bus_.subscribe<FileDownloadCompletedEvent>([this](const FileDownloadCompletedEvent& e) {
+            on_file_download_completed(e);
+        });
+
+        bus_.subscribe<FileConflictDetectedEvent>([this](const FileConflictDetectedEvent&) {
+            stats_.conflicts_detected++;
+        });
+
+        bus_.subscribe<FileConflictResolvedEvent>([this](const FileConflictResolvedEvent&) {
+            stats_.conflicts_resolved++;
         });
     }
 
@@ -149,6 +226,12 @@ public:
         spdlog::info("  Files deleted:   {}", stats_.files_deleted.load());
         spdlog::info("  Bytes added:     {}", stats_.total_bytes_added.load());
         spdlog::info("  Bytes modified:  {}", stats_.total_bytes_modified.load());
+        spdlog::info("  Files uploaded:  {}", stats_.files_uploaded.load());
+        spdlog::info("  Bytes uploaded:  {}", stats_.bytes_uploaded.load());
+        spdlog::info("  Files downloaded:{}", stats_.files_downloaded.load());
+        spdlog::info("  Bytes downloaded:{}", stats_.bytes_downloaded.load());
+        spdlog::info("  Conflicts det.:  {}", stats_.conflicts_detected.load());
+        spdlog::info("  Conflicts res.:  {}", stats_.conflicts_resolved.load());
         spdlog::info("═══════════════════════════════════════");
     }
 
@@ -165,6 +248,16 @@ private:
 
     void on_file_deleted(const FileDeletedEvent& e) {
         stats_.files_deleted++;
+    }
+
+    void on_file_upload_completed(const FileUploadCompletedEvent& e) {
+        stats_.files_uploaded++;
+        stats_.bytes_uploaded += e.total_bytes;
+    }
+
+    void on_file_download_completed(const FileDownloadCompletedEvent& e) {
+        stats_.files_downloaded++;
+        stats_.bytes_downloaded += e.total_bytes;
     }
 
     EventBus& bus_;

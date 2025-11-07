@@ -36,3 +36,14 @@ target_link_libraries(metadata_server_events_example PRIVATE
     dfs_events
     nlohmann_json::nlohmann_json
 )
+
+add_executable(sync_demo_server sync_demo_server.cpp)
+target_link_libraries(sync_demo_server PRIVATE
+    dfs_sync_server
+    dfs_sync
+    dfs_events
+    dfs_metadata
+    dfs_network
+    spdlog::spdlog
+    nlohmann_json::nlohmann_json
+)

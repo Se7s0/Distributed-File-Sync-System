@@ -14,8 +14,9 @@
 #pragma once
 
 #include "dfs/metadata/types.hpp"
-#include <string>
 #include <chrono>
+#include <cstdint>
+#include <string>
 
 namespace dfs::events {
 
@@ -159,8 +160,14 @@ struct ServerShuttingDownEvent {
 };
 
 // ════════════════════════════════════════════════════════
-// Sync Events (Future - Phase 4)
+// Sync Events
 // ════════════════════════════════════════════════════════
+
+enum class ConflictResolutionStrategy {
+    LastWriteWins,
+    Manual,
+    Merge
+};
 
 /**
  * @brief Emitted when sync session starts
@@ -210,6 +217,61 @@ struct SyncFailedEvent {
           error_message(std::move(err)),
           timestamp(std::chrono::system_clock::now())
     {}
+};
+
+// ════════════════════════════════════════════════════════
+// File Transfer Events
+// ════════════════════════════════════════════════════════
+
+struct FileUploadStartedEvent {
+    std::string session_id;
+    std::string file_path;
+    std::size_t total_bytes;
+    std::chrono::system_clock::time_point timestamp{std::chrono::system_clock::now()};
+};
+
+struct FileChunkReceivedEvent {
+    std::string session_id;
+    std::string file_path;
+    std::uint32_t chunk_index;
+    std::uint32_t total_chunks;
+    std::size_t bytes_received;
+    std::chrono::system_clock::time_point timestamp{std::chrono::system_clock::now()};
+};
+
+struct FileUploadCompletedEvent {
+    std::string session_id;
+    std::string file_path;
+    std::string hash;
+    std::size_t total_bytes;
+    std::chrono::milliseconds duration{0};
+    std::chrono::system_clock::time_point timestamp{std::chrono::system_clock::now()};
+};
+
+struct FileDownloadCompletedEvent {
+    std::string session_id;
+    std::string file_path;
+    std::size_t total_bytes;
+    std::chrono::system_clock::time_point timestamp{std::chrono::system_clock::now()};
+};
+
+// ════════════════════════════════════════════════════════
+// Conflict Events
+// ════════════════════════════════════════════════════════
+
+struct FileConflictDetectedEvent {
+    metadata::FileMetadata local;
+    metadata::FileMetadata remote;
+    std::string session_id;
+    std::chrono::system_clock::time_point timestamp{std::chrono::system_clock::now()};
+};
+
+struct FileConflictResolvedEvent {
+    metadata::FileMetadata resolved;
+    metadata::FileMetadata other;
+    ConflictResolutionStrategy strategy;
+    std::string session_id;
+    std::chrono::system_clock::time_point timestamp{std::chrono::system_clock::now()};
 };
 
 } // namespace dfs::events

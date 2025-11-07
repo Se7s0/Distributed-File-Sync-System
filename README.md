@@ -1,599 +1,667 @@
-# Distributed File Sync System - Learning C++ System Design
+# Distributed File Sync System
 
-## Project Overview
+A production-grade distributed file synchronization system built from scratch in modern C++17. This educational project demonstrates advanced systems programming concepts including network protocols, concurrent programming, event-driven architecture, and distributed systems design.
 
-This project is a **modular distributed file synchronization service** built in C++ to demonstrate system design principles, cross-platform development, and modern C++ practices. Coming from a .NET background, this guide explains C++ development patterns, build systems, and architectural decisions.
+## Overview
 
-## Table of Contents
-- [Why This Architecture](#why-this-architecture)
-- [Project Structure](#project-structure)
-- [Build System Explained](#build-system-explained)
-- [Getting Started](#getting-started)
-- [Development Philosophy](#development-philosophy)
-- [Core Components](#core-components)
-- [Learning Roadmap](#learning-roadmap)
+This system enables efficient file synchronization across multiple nodes (clients and servers) using a custom-built HTTP server, metadata management system, event-driven architecture, and intelligent sync engine. The project was built incrementally through 4 major phases, each introducing progressively complex concepts and components.
 
-## Why This Architecture
+## Key Features
 
-### The .NET vs C++ Development Paradigm
+### Network Layer
+- **Custom HTTP/1.1 Server** - Built from scratch with socket programming
+  - State machine-based request parsing
+  - Multi-threaded connection handling (thread pool with Boost.Asio)
+  - Support for multiple server implementations (legacy, thread-pool, async)
+  - Flexible routing system with path parameters
+  - Binary-safe request/response handling
 
-| Aspect | .NET | C++ (This Project) |
-|--------|------|-------------------|
-| **Build System** | MSBuild/dotnet CLI | CMake (generates native build files) |
-| **Package Management** | NuGet (centralized) | FetchContent/vcpkg/Conan (decentralized) |
-| **Project Structure** | .csproj files | CMakeLists.txt files |
-| **Dependencies** | Runtime references | Compile-time linking |
-| **Platform Handling** | CLR abstraction | Preprocessor directives |
-| **Memory Management** | Garbage Collection | RAII/Smart Pointers |
-| **Error Handling** | Exceptions | Result<T,E> pattern |
+### Metadata Management
+- **Custom DDL (Domain-Specific Language)** for file metadata
+  - Lexer and parser implementation (tokenization → AST)
+  - Binary serialization for efficient network transfer
+  - Thread-safe in-memory metadata store
+  - Version tracking and replica management
+  - Merkle tree-based diff computation
 
-### Why These Choices?
+### Event-Driven Architecture
+- **Type-safe Event Bus** using template metaprogramming
+  - Publisher-subscriber pattern with type erasure
+  - Thread-safe concurrent event dispatch
+  - Component-based architecture for loose coupling
+  - Event filtering and priority queues
+  - Comprehensive event types for all system operations
 
-1. **CMake over other build systems**
-   - Industry standard (used by Google, Microsoft, Facebook)
-   - Cross-platform (generates Makefiles on Linux, VS solutions on Windows)
-   - Modern dependency management with FetchContent
-   - IDE support (VSCode, CLion, Visual Studio)
+### Sync Engine
+- **Intelligent File Synchronization**
+  - Change detection with file hashing
+  - Three-way merge conflict resolution
+  - Chunked file transfer with integrity checking
+  - Session-based sync state management
+  - Staging and atomic file updates
 
-2. **Modular architecture from the start**
-   ```
-   src/
-   ├── core/       # Platform abstractions, utilities
-   ├── network/    # Socket, HTTP implementation
-   ├── metadata/   # DDL parser, serialization
-   ├── events/     # Event system
-   ├── sync/       # Synchronization logic
-   ├── server/     # Server application
-   └── client/     # Client application
-   ```
-   Each module has its own CMakeLists.txt, making it independently buildable and testable.
+### Concurrency & Threading
+- **Production-ready concurrency patterns**
+  - Reader-writer locks for metadata store
+  - Lock-free event queues with condition variables
+  - Thread pool for HTTP connection handling
+  - Async I/O with Boost.Asio
+  - RAII-based resource management
 
-3. **Header/Implementation separation**
-   - Headers in `include/dfs/` - public API
-   - Implementation in `src/` - private details
-   - This is like .NET's internal vs public, but at file level
+## Architecture
 
-4. **Result<T,E> pattern instead of exceptions**
-   ```cpp
-   Result<void> connect(const std::string& address, uint16_t port);
-   ```
-   - Explicit error handling (can't ignore errors)
-   - No hidden control flow (unlike exceptions)
-   - Better for systems programming
-   - Similar to Rust's Result or .NET's Task<T> without async
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    Client Application                           │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              │ HTTP/1.1
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      HTTP Server Layer                          │
+│  ┌────────────────┐  ┌────────────────┐  ┌─────────────────┐   │
+│  │  HTTP Parser   │→ │  HTTP Router   │→ │  HTTP Server    │   │
+│  │  (State Machine)│  │  (Routes)      │  │  (Multi-thread) │   │
+│  └────────────────┘  └────────────────┘  └─────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                      Event Bus Layer                            │
+│  ┌────────────────────────────────────────────────────────┐     │
+│  │  Type-Safe Event Bus (Template Metaprogramming)       │     │
+│  │  • File Events • Sync Events • System Events          │     │
+│  └────────────────────────────────────────────────────────┘     │
+│         │                  │                    │                │
+│         ▼                  ▼                    ▼                │
+│  ┌─────────┐        ┌──────────┐        ┌──────────┐           │
+│  │ Logger  │        │  Metrics │        │   Sync   │           │
+│  │Component│        │Component │        │ Manager  │           │
+│  └─────────┘        └──────────┘        └──────────┘           │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                   Metadata & Sync Engine                        │
+│  ┌──────────────┐  ┌─────────────────┐  ┌──────────────────┐   │
+│  │   Metadata   │  │  Change         │  │  File Transfer   │   │
+│  │   Store      │  │  Detector       │  │  Service         │   │
+│  │ (Thread-safe)│  │  (Merkle Tree)  │  │  (Chunked)       │   │
+│  └──────────────┘  └─────────────────┘  └──────────────────┘   │
+│  ┌──────────────┐  ┌─────────────────┐  ┌──────────────────┐   │
+│  │   Conflict   │  │  Sync Session   │  │  DDL Parser      │   │
+│  │   Resolver   │  │  (State Machine)│  │  (Lexer/Parser)  │   │
+│  └──────────────┘  └─────────────────┘  └──────────────────┘   │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                      ┌───────────────┐
+                      │  File System  │
+                      └───────────────┘
+```
+
+## Development Phases
+
+### Phase 0: Foundation
+- Cross-platform socket abstraction (Windows/Linux)
+- Error handling with `Result<T>` type (Rust-inspired)
+- RAII wrappers for system resources
+- Platform-specific abstractions
+
+### Phase 1: HTTP Server & Client (Days 1-5)
+**Objective:** Build a working HTTP/1.1 server from scratch
+
+**What was built:**
+- HTTP protocol types (methods, headers, status codes)
+- State machine-based HTTP parser for incremental request parsing
+- HTTP server with connection management
+- HTTP router with path parameter support
+- Multiple server implementations:
+  - Legacy: Single-threaded blocking I/O
+  - Thread-pool: Multi-threaded with fixed thread pool
+  - Asio: Async I/O with Boost.Asio
+
+**Key learning:**
+- Socket programming (TCP, bind, listen, accept)
+- HTTP/1.1 protocol implementation
+- State machine design for protocol parsing
+- Concurrent connection handling
+- Thread pool patterns
+
+**Examples:**
+- `socket_example.cpp` - Basic TCP client/server
+- `http_server_example.cpp` - Simple HTTP server with routes
+- `http_server_comparison.cpp` - Performance comparison of implementations
+- `http_router_example.cpp` - Advanced routing with parameters
+
+### Phase 2: Metadata & DDL System (Days 6-13)
+**Objective:** Create a custom language for file metadata and efficient storage
+
+**What was built:**
+- Custom DDL syntax (YAML-like) for file metadata
+- Lexer (tokenizer) with indentation handling
+- Recursive descent parser
+- Binary serialization format with schema versioning
+- Thread-safe metadata store with reader-writer locks
+- HTTP API endpoints for metadata operations
+
+**Key learning:**
+- Language design and parsing theory
+- Lexical analysis and tokenization
+- Abstract syntax tree construction
+- Binary protocol design (endianness, magic numbers)
+- Concurrent data structure design
+- REST API design
+
+**DDL Format:**
+```yaml
+file_metadata:
+  name: "document.pdf"
+  version: 3
+  size: 1048576
+  hash: "sha256:abc123..."
+  last_modified: "2024-01-15T10:30:00Z"
+  owner: "laptop1"
+  sync_state:
+    status: "synced"
+    replicas:
+      - node: "server1"
+        version: 3
+```
+
+**Examples:**
+- `metadata_server_example.cpp` - Metadata API server
+- `metadata_server_asio_example.cpp` - Async metadata server
+
+### Phase 3: Event System (Days 14-19)
+**Objective:** Implement event-driven architecture for loose coupling
+
+**What was built:**
+- Type-safe event bus using template metaprogramming
+- Event types for file operations, sync events, system events
+- Thread-safe event queue with condition variables
+- Component system for event subscribers
+- Logger, metrics, and sync manager components
+- Event filtering and priority handling
+
+**Key learning:**
+- Observer and publisher-subscriber patterns
+- Template metaprogramming and type erasure
+- `std::type_index` for runtime type identification
+- Condition variables for thread synchronization
+- Component-based architecture
+
+**Event Types:**
+```cpp
+FileAddedEvent         // New file detected
+FileModifiedEvent      // File content changed
+FileDeletedEvent       // File removed
+SyncStartedEvent       // Sync session began
+SyncCompletedEvent     // Sync finished successfully
+FileConflictDetectedEvent  // Merge conflict found
+```
+
+**Examples:**
+- `metadata_server_events_example.cpp` - Event-driven metadata server
+
+### Phase 4: Sync Engine (Days 20-26)
+**Objective:** Implement intelligent file synchronization with conflict resolution
+
+**What was built:**
+- Change detector with file hashing
+- Merkle tree for efficient diff computation
+- Sync session state machine
+- Chunked file transfer with integrity verification
+- Conflict detection and resolution strategies
+- Sync service control plane
+- Complete sync API with upload/download endpoints
+
+**Key learning:**
+- Merkle trees for distributed comparison
+- State machine design for complex workflows
+- Three-way merge algorithms
+- Chunked streaming and resume capability
+- Conflict resolution strategies (last-write-wins, manual, merge)
+- Atomic file operations and staging
+
+**Sync Workflow:**
+1. Client registers with server → receives client ID
+2. Client starts sync session → receives session ID
+3. Client sends local snapshot → server computes diff
+4. Server responds with files to upload/download
+5. Client uploads files in chunks → server stages them
+6. Server finalizes uploads → updates metadata
+7. Client downloads modified files
+8. Session completes → statistics available
+
+**Examples:**
+- `sync_demo_server.cpp` - Complete sync server with all endpoints
 
 ## Project Structure
 
 ```
-cpp_dist_file_proj/
-├── CMakeLists.txt           # Root build configuration
-├── include/                 # Public headers (API)
-│   └── dfs/
-│       ├── core/           # Core utilities
-│       │   ├── platform.hpp    # OS abstraction
-│       │   └── result.hpp      # Error handling
-│       └── network/        # Networking
-│           └── socket.hpp      # Socket abstraction
-├── src/                     # Implementation files
-│   ├── core/               # Core module
-│   │   └── CMakeLists.txt
-│   ├── network/            # Network module
-│   │   ├── socket.cpp
-│   │   └── CMakeLists.txt
-│   └── [other modules]/
-├── examples/               # Example applications
+Distributed-File-Sync-System/
+├── include/dfs/               # Public headers
+│   ├── core/                  # Core utilities
+│   │   ├── platform.hpp       # Platform abstractions
+│   │   └── result.hpp         # Result<T> error handling
+│   ├── network/               # Network layer (Phase 1)
+│   │   ├── socket.hpp         # Socket abstraction
+│   │   ├── http_types.hpp     # HTTP data structures
+│   │   ├── http_parser.hpp    # HTTP request parser
+│   │   ├── http_router.hpp    # HTTP routing
+│   │   ├── http_server.hpp    # Thread-pool server
+│   │   ├── http_server_asio.hpp  # Async I/O server
+│   │   └── http_server_legacy.hpp # Legacy server
+│   ├── metadata/              # Metadata system (Phase 2)
+│   │   ├── types.hpp          # Metadata types
+│   │   ├── lexer.hpp          # DDL tokenizer
+│   │   ├── parser.hpp         # DDL parser
+│   │   ├── serializer.hpp     # Binary serialization
+│   │   └── store.hpp          # Metadata storage
+│   ├── events/                # Event system (Phase 3)
+│   │   ├── event_bus.hpp      # Type-safe event bus
+│   │   ├── event_queue.hpp    # Thread-safe queue
+│   │   ├── events.hpp         # Event type definitions
+│   │   └── components.hpp     # Event components
+│   └── sync/                  # Sync engine (Phase 4)
+│       ├── types.hpp          # Sync types
+│       ├── change_detector.hpp # File change detection
+│       ├── merkle_tree.hpp    # Merkle diff
+│       ├── session.hpp        # Session state machine
+│       ├── conflict.hpp       # Conflict resolution
+│       ├── transfer.hpp       # File transfer
+│       └── service.hpp        # Sync service
+├── src/                       # Implementation files
+│   ├── network/
+│   ├── sync/
+│   └── server/
+├── examples/                  # Runnable examples
 │   ├── socket_example.cpp
-│   └── CMakeLists.txt
-├── tests/                  # Unit tests
-├── build/                  # Build output (generated)
-└── build.sh               # Build script
+│   ├── http_server_example.cpp
+│   ├── http_router_example.cpp
+│   ├── metadata_server_example.cpp
+│   ├── metadata_server_events_example.cpp
+│   └── sync_demo_server.cpp
+├── tests/                     # Unit and integration tests
+│   ├── network/
+│   ├── metadata/
+│   ├── events/
+│   ├── sync/
+│   └── e2e/
+└── docs/                      # Comprehensive documentation
+    ├── phase_1_reference.md
+    ├── phase_2_reference.md
+    ├── phase_3_reference.md
+    └── phase_4_code_reference.md
 ```
 
-### Why This Structure?
+## Technical Highlights
 
-1. **include/dfs/** - Namespaced headers
-   - Prevents header conflicts
-   - Clear API boundary
-   - Users do `#include "dfs/network/socket.hpp"`
+### Advanced C++ Features Used
 
-2. **Separate src/ and include/**
-   - Hide implementation details
-   - Faster compilation (modify .cpp without recompiling dependents)
-   - Clear public API
-
-3. **Module CMakeLists.txt**
-   - Each module defines its own library
-   - Dependencies explicitly declared
-   - Can build/test modules independently
-
-## Build System Explained
-
-### CMakeLists.txt Breakdown
-
-```cmake
-cmake_minimum_required(VERSION 3.20)
-```
-- Ensures features we need are available
-- CMake 3.20+ has good FetchContent support
-
-```cmake
-set(CMAKE_CXX_STANDARD 20)
-```
-- Uses C++20 (concepts, ranges, coroutines)
-- Like targeting .NET 8.0
-
-```cmake
-if(MSVC)
-    add_compile_options(/W4 /WX)
-else()
-    add_compile_options(-Wall -Wextra -Werror)
-endif()
-```
-- Platform-specific compiler flags
-- Treats warnings as errors (good practice)
-
-```cmake
-FetchContent_Declare(
-    spdlog
-    GIT_REPOSITORY https://github.com/gabime/spdlog.git
-    GIT_TAG v1.13.0
-)
-FetchContent_MakeAvailable(spdlog)
-```
-- Downloads and builds dependencies
-- Like NuGet but at compile time
-- Ensures exact version match
-
-### Library Types in CMake
-
-```cmake
-add_library(dfs_core INTERFACE)    # Header-only library
-add_library(dfs_network STATIC)    # Static library (.lib/.a)
-add_library(dfs_shared SHARED)     # Dynamic library (.dll/.so)
+**Template Metaprogramming:**
+```cpp
+template<typename EventType>
+void EventBus::subscribe(std::function<void(const EventType&)> handler);
+// Compiler generates type-safe function for each event type
 ```
 
-- **INTERFACE**: Header-only, no compilation
-- **STATIC**: Compiled into the executable
-- **SHARED**: Separate file, loaded at runtime
-
-## Getting Started
-
-### Prerequisites
-
-**Windows (WSL2 recommended):**
-```bash
-sudo apt update
-sudo apt install -y build-essential cmake git
+**Type Erasure:**
+```cpp
+// Store different event handler types in single container
+std::unordered_map<std::type_index, std::vector<std::unique_ptr<HandlerBase>>>
 ```
 
-**Native Linux:**
-```bash
-sudo apt install -y build-essential cmake git
-```
-
-**macOS:**
-```bash
-brew install cmake
-```
-
-### Building the Project
-
-1. **Clone and enter directory:**
-```bash
-cd /mnt/c/Users/mohussein/Desktop/swe/cpp_dist_file_proj
-```
-
-2. **Build using the script:**
-```bash
-./build.sh
-```
-
-Or manually:
-```bash
-mkdir -p build
-cd build
-cmake .. -DCMAKE_BUILD_TYPE=Debug
-cmake --build . -j4
-```
-
-3. **Run the example:**
-```bash
-./build/examples/socket_example
-```
-
-### Build Configurations
-
-**Debug build** (default):
-```bash
-cmake .. -DCMAKE_BUILD_TYPE=Debug
-```
-- Includes debug symbols
-- No optimizations
-- Assertions enabled
-
-**Release build**:
-```bash
-cmake .. -DCMAKE_BUILD_TYPE=Release
-```
-- Optimizations enabled
-- No debug symbols
-- Faster execution
-
-**Custom options**:
-```bash
-cmake .. -DBUILD_TESTS=OFF -DBUILD_EXAMPLES=ON
-```
-
-## Development Philosophy
-
-### 1. RAII (Resource Acquisition Is Initialization)
-
+**RAII (Resource Acquisition Is Initialization):**
 ```cpp
 class Socket {
-    socket_t socket_;
-public:
-    Socket() : socket_(INVALID_SOCKET_VALUE) {}
-    ~Socket() { 
-        if (socket_ != INVALID_SOCKET_VALUE) {
-            close_socket(socket_);
-        }
-    }
-    // Move semantics
-    Socket(Socket&& other) noexcept;
-    // Deleted copy (sockets can't be copied)
-    Socket(const Socket&) = delete;
+    ~Socket() { close(); }  // Automatic resource cleanup
 };
 ```
 
-**Why RAII?**
-- Automatic resource management (like .NET's `using`)
-- No manual cleanup needed
-- Exception safe
-- Prevents resource leaks
-
-### 2. Platform Abstraction
-
+**Move Semantics:**
 ```cpp
-#ifdef _WIN32
-    using socket_t = SOCKET;
-    #define close_socket closesocket
-#else
-    using socket_t = int;
-    #define close_socket ::close
-#endif
-```
-
-**Why abstract?**
-- Single codebase for Windows/Linux
-- Compile-time selection (zero overhead)
-- Platform differences hidden from users
-
-### 3. Error Handling Strategy
-
-```cpp
-Result<size_t> Socket::send(const std::vector<uint8_t>& data) {
-    ssize_t sent = ::send(socket_, data.data(), data.size(), 0);
-    if (sent < 0) {
-        return Err<size_t>("Failed to send data");
-    }
-    return Ok(static_cast<size_t>(sent));
-}
-
-// Usage
-auto result = socket.send(data);
-if (result.is_error()) {
-    spdlog::error("Send failed: {}", result.error());
-    return;
-}
-size_t bytes_sent = result.value();
-```
-
-**Why Result<T,E>?**
-- Can't ignore errors (compile-time enforcement possible)
-- No hidden control flow
-- Composable (can chain operations)
-- Performance (no exception overhead)
-
-### 4. Modern C++ Features Used
-
-**Templates** - Generic programming:
-```cpp
-template<typename T, typename E = std::string>
-class Result { ... };
-```
-
-**Move semantics** - Efficient resource transfer:
-```cpp
-Socket(Socket&& other) noexcept;
-```
-
-**Smart pointers** - Automatic memory management:
-```cpp
-Result<std::unique_ptr<Socket>> accept();
-```
-
-**Concepts (C++20)** - Constrained templates:
-```cpp
-template<typename T>
-requires std::is_integral_v<T>
-void process(T value);
-```
-
-## Core Components
-
-### Platform Layer (`include/dfs/core/platform.hpp`)
-
-Provides OS detection and abstraction:
-- Compile-time platform detection
-- Unified interface for platform-specific features
-- Zero-cost abstraction (resolved at compile time)
-
-### Result Type (`include/dfs/core/result.hpp`)
-
-Error handling without exceptions:
-- Explicit error propagation
-- Type-safe error handling
-- Monadic operations (map, and_then - future enhancement)
-
-### Socket Abstraction (`include/dfs/network/socket.hpp`)
-
-Cross-platform networking:
-- Handles Windows (Winsock) and Linux (BSD sockets)
-- RAII for automatic cleanup
-- Non-blocking I/O support
-- Move-only semantics (sockets can't be copied)
-
-## Learning Roadmap
-
-### Phase 0: Foundation (Current) ✓
-- [x] Project structure
-- [x] Build system (CMake)
-- [x] Platform abstraction
-- [x] Basic socket implementation
-- [x] Error handling pattern
-
-**What you learn:**
-- How C++ projects are organized
-- Build systems and dependency management
-- Cross-platform development
-- RAII and resource management
-
-### Phase 1: HTTP Implementation
-- [ ] HTTP/1.1 parser (state machine)
-- [ ] Request/Response objects
-- [ ] Connection pooling
-- [ ] Async I/O with epoll/IOCP
-
-**What you'll learn:**
-- Protocol implementation
-- State machines in C++
-- Memory-efficient parsing
-- Platform-specific async I/O
-
-### Phase 2: Metadata & DDL
-- [ ] Custom DDL language design
-- [ ] Parser (recursive descent or parser generator)
-- [ ] Serialization (binary format)
-- [ ] Schema evolution
-
-**What you'll learn:**
-- Language design
-- Parsing techniques
-- Binary protocols
-- Backward compatibility
-
-### Phase 3: Event System
-- [ ] Publisher-subscriber pattern
-- [ ] Event queue with priority
-- [ ] Thread-safe event dispatch
-- [ ] Component registration
-
-**What you'll learn:**
-- Design patterns in C++
-- Lock-free programming
-- Thread synchronization
-- Template metaprogramming
-
-### Phase 4: Sync Engine
-- [ ] Merkle trees for diff detection
-- [ ] Chunk-based transfer
-- [ ] Conflict resolution
-- [ ] State machine for sync protocol
-
-**What you'll learn:**
-- Distributed systems concepts
-- Data structures for sync
-- Protocol design
-- State management
-
-### Phase 5: OS Integration
-- [ ] Windows Minifilter driver
-- [ ] Linux inotify/fanotify
-- [ ] Service/daemon creation
-- [ ] System tray integration
-
-**What you'll learn:**
-- Kernel programming basics
-- System services
-- OS-specific APIs
-- User/kernel communication
-
-### Phase 6: Production Features
-- [ ] Configuration management
-- [ ] Logging and metrics
-- [ ] Plugin system
-- [ ] Performance optimization
-
-**What you'll learn:**
-- Production considerations
-- Dynamic loading
-- Profiling and optimization
-- Maintainable architecture
-
-## Testing Strategy
-
-### Unit Tests (Google Test)
-```cpp
-TEST(SocketTest, CreateTcpSocket) {
-    Socket socket;
-    auto result = socket.create(SocketType::TCP);
-    EXPECT_TRUE(result.is_ok());
-    EXPECT_TRUE(socket.is_valid());
+void push(T item) {
+    queue_.push(std::move(item));  // Transfer ownership, avoid copies
 }
 ```
 
-### Integration Tests
-- Test client-server communication
-- Test file sync scenarios
-- Test error recovery
+**Perfect Forwarding:**
+```cpp
+template<typename EventType>
+void emit(EventType&& event);  // Preserve value category
+```
 
-### Performance Tests
-- Measure throughput
-- Profile memory usage
-- Benchmark against alternatives
+### Concurrency Patterns
 
-## Common Development Tasks
+**Reader-Writer Locks:**
+```cpp
+std::shared_mutex mutex_;
+std::shared_lock lock(mutex_);   // Multiple readers
+std::unique_lock lock(mutex_);   // Exclusive writer
+```
 
-### Adding a New Module
+**Producer-Consumer Queue:**
+```cpp
+ThreadSafeQueue<Event> queue_;
+producer: queue_.push(event);
+consumer: auto event = queue_.pop();  // Blocks until available
+```
 
-1. Create module directory:
+**Condition Variables:**
+```cpp
+std::condition_variable cv_;
+cv_.wait(lock, []() { return !queue_.empty(); });
+cv_.notify_one();
+```
+
+**Thread Pool:**
+```cpp
+// Fixed-size thread pool with work queue
+for (size_t i = 0; i < num_threads; ++i) {
+    workers_.emplace_back([this] { worker_thread(); });
+}
+```
+
+### Design Patterns
+
+- **Observer Pattern** - Event bus for decoupled communication
+- **State Machine** - HTTP parser, sync session management
+- **Factory Pattern** - Server implementation selection
+- **Strategy Pattern** - Conflict resolution strategies
+- **Component Pattern** - Modular event subscribers
+- **Repository Pattern** - Metadata store abstraction
+
+## Building the Project
+
+### Prerequisites
+
+**Linux/WSL:**
 ```bash
-mkdir -p src/newmodule include/dfs/newmodule
+sudo apt install build-essential cmake git libboost-dev
 ```
 
-2. Create CMakeLists.txt:
-```cmake
-add_library(dfs_newmodule STATIC
-    implementation.cpp
-)
-target_include_directories(dfs_newmodule PUBLIC
-    ${CMAKE_SOURCE_DIR}/include
-)
-target_link_libraries(dfs_newmodule PUBLIC
-    dfs_core
-)
-```
+**Windows:**
+- Visual Studio 2019+ with C++17 support
+- CMake 3.15+
+- Boost libraries (see BOOST_SETUP_WINDOWS.md)
 
-3. Add to root CMakeLists.txt:
-```cmake
-add_subdirectory(src/newmodule)
-```
+### Build Steps
 
-### Adding a Dependency
-
-Using FetchContent:
-```cmake
-FetchContent_Declare(
-    libname
-    GIT_REPOSITORY https://github.com/org/lib.git
-    GIT_TAG v1.0.0
-)
-FetchContent_MakeAvailable(libname)
-```
-
-### Debugging
-
-**With GDB (Linux/WSL):**
 ```bash
-gdb ./build/examples/socket_example
-(gdb) break Socket::connect
-(gdb) run
-(gdb) backtrace
+# 1. Clone and navigate
+cd /path/to/Distributed-File-Sync-System
+
+# 2. Create build directory
+mkdir -p build && cd build
+
+# 3. Configure (automatically downloads spdlog, nlohmann/json, googletest)
+cmake .. -DCMAKE_BUILD_TYPE=Release
+
+# 4. Build (parallel with 4 jobs)
+cmake --build . -j4
+
+# 5. Run tests
+ctest --output-on-failure
+
+# 6. Run examples
+./examples/sync_demo_server --port 8080 --data-dir ./data
 ```
 
-**With Visual Studio (Windows):**
-- Generate VS solution: `cmake .. -G "Visual Studio 17 2022"`
-- Open .sln file
-- Set breakpoints and debug
+### Build Options
 
-## Comparison with .NET Architecture
-
-| .NET Concept | C++ Equivalent (This Project) |
-|--------------|------------------------------|
-| `Task<T>` | `Result<T>` (sync) / `std::future<T>` (async) |
-| `IDisposable` | RAII destructors |
-| `using` statement | RAII scope |
-| Interfaces | Pure virtual classes |
-| Properties | Getter/setter methods |
-| Events | Signal/slot or observer pattern |
-| LINQ | Ranges library (C++20) |
-| Attributes | Template metaprogramming |
-| Reflection | Limited (typeid, type_traits) |
-| Garbage Collection | Smart pointers (unique_ptr, shared_ptr) |
-
-## Troubleshooting
-
-### Build Errors
-
-**"CMake not found"**
 ```bash
-sudo apt install cmake
+# Debug build with symbols
+cmake .. -DCMAKE_BUILD_TYPE=Debug
+
+# Disable tests
+cmake .. -DBUILD_TESTS=OFF
+
+# Disable examples
+cmake .. -DBUILD_EXAMPLES=OFF
 ```
 
-**"No CMAKE_CXX_COMPILER"**
+## Running Examples
+
+### 1. Socket Example
 ```bash
-sudo apt install build-essential
+./build/examples/socket_example
+# Demonstrates basic TCP client/server communication
 ```
 
-**Linking errors on Windows**
-- Ensure Visual Studio or MinGW is installed
-- Use Developer Command Prompt
+### 2. HTTP Server Example
+```bash
+./build/examples/http_server_example 8080
+# Visit: http://localhost:8080
+# Routes: /, /hello, /info, /echo, /headers
+```
 
-### Runtime Errors
+### 3. HTTP Router Example
+```bash
+./build/examples/http_router_example
+# Demonstrates advanced routing with path parameters
+# Example: GET /users/:id/posts/:post_id
+```
 
-**"Failed to create socket"**
-- Check firewall settings
-- Run with appropriate permissions
-- Ensure Winsock is initialized (Windows)
+### 4. HTTP Server Comparison
+```bash
+./build/examples/http_server_comparison
+# Benchmarks different server implementations
+# Outputs requests/sec for legacy, thread-pool, and async variants
+```
 
-**"Address already in use"**
-- Previous instance still running
-- Wait for TIME_WAIT to expire
-- Use SO_REUSEADDR flag
+### 5. Metadata Server Example
+```bash
+./build/examples/metadata_server_example 8080
+# Metadata API at http://localhost:8080/api/metadata
+# Test with: curl -X POST http://localhost:8080/api/metadata/add -d @file.ddl
+```
 
-## Next Steps
+### 6. Metadata Server (Async + Events)
+```bash
+./build/examples/metadata_server_asio_example
+# Async I/O version with event-driven logging and metrics
+```
 
-1. **Run the current example:**
-   ```bash
-   ./build.sh
-   ./build/examples/socket_example
-   ```
+### 7. Sync Demo Server (Complete System)
+```bash
+./build/examples/sync_demo_server --port 8080 --data-dir ./sync_data
+# Full sync system with all endpoints
 
-2. **Experiment with the socket API:**
-   - Modify `socket_example.cpp`
-   - Try creating a simple echo server
-   - Test error handling
+# API endpoints:
+# POST /api/register                   - Register client
+# POST /api/sync/start                 - Start sync session
+# POST /api/sync/diff                  - Compute file differences
+# POST /api/file/upload_chunk          - Upload file chunk
+# POST /api/file/upload_complete       - Finalize upload
+# GET  /api/file/download/<path>       - Download file
+# GET  /api/sync/status                - Session status
+```
 
-3. **Proceed to Phase 1:**
-   - Implement HTTP parser
-   - Add request/response handling
-   - Build a simple HTTP server
+### Testing the Sync Server
 
-## Resources
+```bash
+# 1. Register a client
+curl -X POST http://localhost:8080/api/register \
+  -H "Content-Type: application/json" \
+  -d '{"client_name":"laptop1","platform":"linux"}'
 
-### C++ Learning
-- [C++ Core Guidelines](https://isocpp.github.io/CppCoreGuidelines/)
-- [Modern C++ Features](https://github.com/AnthonyCalandra/modern-cpp-features)
-- [CMake Tutorial](https://cmake.org/cmake/help/latest/guide/tutorial/)
+# Response: {"client_id":"laptop1-1234567890",...}
 
-### System Design
-- [High Performance Browser Networking](https://hpbn.co/)
-- [Designing Data-Intensive Applications](https://dataintensive.net/)
+# 2. Start sync session
+curl -X POST http://localhost:8080/api/sync/start \
+  -H "Content-Type: application/json" \
+  -d '{"client_id":"laptop1-1234567890"}'
 
-### Tools
-- [Compiler Explorer](https://godbolt.org/) - See assembly output
-- [C++ Insights](https://cppinsights.io/) - See template expansions
-- [Valgrind](https://valgrind.org/) - Memory debugging (Linux)
+# Response: {"session_id":"abc123","server_snapshot":[...]}
 
-## Contributing Guidelines
+# 3. Get sync status
+curl http://localhost:8080/api/sync/status?session_id=abc123
 
-1. Follow existing code style
-2. Add tests for new features
-3. Update documentation
-4. Ensure cross-platform compatibility
-5. Use RAII for resource management
-6. Prefer Result<T> over exceptions
+# Response: {"state":"Complete","files_synced":10,...}
+```
 
----
+## API Reference
 
-This project demonstrates modern C++ system design, showing how to build production-grade infrastructure software. Each phase builds upon the previous, creating a complete distributed system from scratch.
+### Metadata API
+
+**POST /api/metadata/add**
+```json
+{
+  "file_path": "/documents/report.pdf",
+  "hash": "sha256:abc123...",
+  "size": 1048576,
+  "version": 1
+}
+```
+
+**GET /api/metadata/get/:path**
+```json
+{
+  "file_path": "/documents/report.pdf",
+  "hash": "sha256:abc123...",
+  "size": 1048576,
+  "version": 1,
+  "replicas": [...]
+}
+```
+
+**GET /api/metadata/list**
+```json
+{
+  "files": [
+    {"file_path": "/doc1.txt", "hash": "...", "version": 2},
+    {"file_path": "/doc2.pdf", "hash": "...", "version": 1}
+  ]
+}
+```
+
+### Sync API
+
+**POST /api/sync/start**
+```json
+{
+  "client_id": "laptop1-123"
+}
+```
+Response:
+```json
+{
+  "session_id": "sess_abc123",
+  "server_snapshot": [...]
+}
+```
+
+**POST /api/sync/diff**
+```json
+{
+  "session_id": "sess_abc123",
+  "local_snapshot": [...]
+}
+```
+Response:
+```json
+{
+  "files_to_upload": ["file1.txt", "file2.pdf"],
+  "files_to_download": ["file3.doc"],
+  "files_to_delete_remote": []
+}
+```
+
+**POST /api/file/upload_chunk**
+```json
+{
+  "session_id": "sess_abc123",
+  "file_path": "/file.txt",
+  "chunk_index": 0,
+  "total_chunks": 5,
+  "data": "48656c6c6f...",  // hex-encoded
+  "chunk_hash": "abc123"
+}
+```
+
+## Testing
+
+### Running Tests
+
+```bash
+# Run all tests
+cd build
+ctest --output-on-failure
+
+# Run specific test suite
+./tests/network/http_parser_test
+./tests/metadata/parser_test
+./tests/events/event_bus_test
+./tests/sync/merkle_tree_test
+```
+
+### Test Coverage
+
+- **Network Layer:** HTTP parsing, routing, server implementations
+- **Metadata System:** Lexer, parser, serialization, store operations
+- **Event System:** Event bus, type safety, thread safety, components
+- **Sync Engine:** Change detection, Merkle tree, conflict resolution, transfers
+
+### Performance Benchmarks
+
+```bash
+# Event bus throughput
+./tests/events/event_bus_benchmark
+# Expected: 100k-1M+ events/sec
+
+# HTTP server performance
+ab -n 10000 -c 100 http://localhost:8080/hello
+# Expected: 5k-50k requests/sec (depends on implementation)
+
+# Metadata operations
+./tests/metadata/metadata_benchmark
+# Expected: 100k+ operations/sec
+```
+
+## Key Takeaways
+
+This project demonstrates:
+
+1. **Systems Programming** - Building network protocols from scratch
+2. **Concurrent Programming** - Thread-safe data structures and async I/O
+3. **Language Design** - Custom DSL with lexer/parser/serializer
+4. **Distributed Systems** - Sync protocols, conflict resolution, consistency
+5. **Modern C++** - Templates, move semantics, RAII, type erasure
+6. **Software Architecture** - Event-driven design, loose coupling, modularity
+7. **Production Patterns** - Error handling, logging, metrics, testing
+
+## Future Enhancements
+
+- **Phase 5+:** OS integration for real-time change detection
+- **Encryption:** TLS/SSL for network communication
+- **Compression:** Gzip/LZ4 for chunk transfers
+- **Delta Sync:** rsync-style binary diff
+- **Web UI:** Browser-based management interface
+- **Clustering:** Multi-server replication
+- **Persistence:** Database backend for metadata
+
+## Educational Value
+
+This project was built as a learning exercise to understand:
+- How HTTP servers work under the hood
+- How to design and implement custom file formats
+- Event-driven architecture in C++
+- Distributed system challenges (conflicts, consistency)
+
+Each phase built upon the previous, gradually increasing complexity while maintaining clean architecture and comprehensive testing.
+
+## License
+
+This is an educational project. Feel free to use as a reference for learning systems programming and distributed systems concepts.
+
+## Acknowledgments
+
+Built with:
+- [Boost](https://www.boost.org/) - Asio for async I/O
+- [spdlog](https://github.com/gabime/spdlog) - Fast C++ logging
+- [nlohmann/json](https://github.com/nlohmann/json) - JSON for Modern C++
+- [GoogleTest](https://github.com/google/googletest) - Unit testing framework
+
+Inspired by real-world systems like Dropbox, Git, and Rsync.

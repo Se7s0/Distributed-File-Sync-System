@@ -50,6 +50,10 @@ ipch/
 .DS_Store
 Thumbs.db
 
+# Documentation and markdown files
+*.md
+!README.md
+
 # CMake
 CMakeCache.txt
 CMakeFiles/
@@ -61,3 +65,24 @@ _deps/
 *.cmake
 !CMakeLists.txt
 CMakeSettings.json
+
+# Libraries
+*.a
+*.lib
+
+# Dependency directories
+external/
+third_party/
+vendor/
+
+# Generated files
+*.gch
+*.pch
+
+# Core dumps
+core
+core.*
+
+# Backup files
+*.bak
+*.tmp
