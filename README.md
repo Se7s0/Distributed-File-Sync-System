@@ -1,6 +1,6 @@
 # Distributed File Sync System
 
-A production-grade distributed file synchronization system built from scratch in modern C++17. This educational project demonstrates advanced systems programming concepts including network protocols, concurrent programming, event-driven architecture, and distributed systems design.
+A distributed file synchronization system built from scratch in modern C++17. This educational project demonstrates advanced systems programming concepts including network protocols, concurrent programming, event-driven architecture, and distributed systems design.
 
 ## Overview
 
@@ -665,3 +665,4 @@ Built with:
 - [GoogleTest](https://github.com/google/googletest) - Unit testing framework
 
 Inspired by real-world systems like Dropbox, Git, and Rsync.
+
